@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+  discovery-microservice:
+    container_name: discovery-microservice
+    build:
+      context: ./discovery
+      dockerfile: Dockerfile
+    ports:
+      - 8761:8761
+    environment:
+      - server.port=8761
+      - eureka.client.register-with-eureka=false
+      - eureka.client.fetch-registry=false
+    networks:
+      - springboot-mysql-net
+    restart: on-failure
+  account-microservice:
+    container_name: account-microservice
+    build:
+      context: ./account
+      dockerfile: Dockerfile
+    ports:
+      - 8081:8081
+    depends_on:
+      - discovery-microservice
+    environment:
+      - spring.jpa.hibernate.ddl-auto=update
+      - spring.datasource.url=jdbc:mysql://host.docker.internal:3306/challenge
+      - spring.datasource.username=root
+      - spring.datasource.password=strong_password
+      - spring.jpa.hibernate.ddl-auto=validate
+      - server.port=8081
+      - eureka.instance.instance-id=account-microservice:1
+      - eureka.client.serviceUrl.defaultZone=http://172.18.0.2:8761/eureka/
+    networks:
+      - springboot-mysql-net
+    restart: on-failure
+  client-microservice:
+    container_name: client-microservice
+    build:
+      context: ./client-person
+      dockerfile: Dockerfile
+    ports:
+      - 8082:8082
+    depends_on:
+      - discovery-microservice
+    environment:
+      - spring.jpa.hibernate.ddl-auto=update
+      - spring.datasource.url=jdbc:mysql://host.docker.internal:3306/challenge
+      - spring.datasource.username=root
+      - spring.datasource.password=strong_password
+      - spring.jpa.hibernate.ddl-auto=validate
+      - server.port=8082
+      - eureka.instance.instance-id=client-microservice:2
+      - eureka.client.serviceUrl.defaultZone=http://172.18.0.2:8761/eureka/
+    networks:
+      - springboot-mysql-net
+    restart: on-failure
+  gateway-microservice:
+    container_name: gateway-microservice
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    depends_on:
+      - discovery-microservice
+    environment:
+      - spring.cloud.gateway.discovery.locator.enabled=true
+      - spring.cloud.loadbalancer.ribbon.enabled=false
+      - spring.cloud.gateway.mvc.routes[0].id=client-person
+      - spring.cloud.gateway.mvc.routes[0].uri=lb://CLIENT-PERSON
+      - spring.cloud.gateway.mvc.routes[0].predicates[0].=Path=/clientes/**
+      - spring.cloud.gateway.mvc.routes[1].id=account
+      - spring.cloud.gateway.mvc.routes[1].uri=lb://ACCOUNT
+      - spring.cloud.gateway.mvc.routes[1].predicates[0].=Path=/movimientos/**, /cuentas/**, /reportes/**
+      - server.port=8080
+      - eureka.instance.instance-id=gateway:3
+      - eureka.client.serviceUrl.defaultZone=http://172.18.0.2:8761/eureka/
+    networks:
+      - springboot-mysql-net
+    restart: on-failure
+
+networks:
+  springboot-mysql-net:
+    driver: bridge
+  
